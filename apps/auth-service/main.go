@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 
 	"github.com/edr3x/auth-service/internal/kv"
 )
@@ -42,29 +43,27 @@ func init() {
 }
 
 func main() {
-	mux := http.NewServeMux()
+	mux := echo.New()
 	store := kv.NewKeyValueStore()
 
-	mux.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte("Auth service running..."))
+	mux.GET("/", func(c echo.Context) error {
+		return c.String(http.StatusOK, "Auth service running...")
 	})
 
-	mux.HandleFunc("POST /api/auth/login", func(w http.ResponseWriter, r *http.Request) {
+	mux.POST("/api/auth/login", func(c echo.Context) error {
 		var body LoginInput
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "Error decoding request body", http.StatusBadRequest)
-			return
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Error decoding request body")
 		}
 
 		uid, ok := store.Get(body.Email)
 		if !ok {
-			http.Error(w, "user not found", http.StatusNotFound)
-			return
+			return echo.NewHTTPError(http.StatusNotFound, "user not found")
 		}
 
 		data, ok := store.Get(uid)
 		if !ok {
-			http.Error(w, "user not found", http.StatusNotFound)
+			return echo.NewHTTPError(http.StatusNotFound, "user not found")
 		}
 
 		var structuredData RegisterInput
@@ -73,29 +72,26 @@ func main() {
 		}
 
 		if structuredData.Password != body.Password {
-			http.Error(w, "password didn't match", http.StatusUnauthorized)
+			return echo.NewHTTPError(http.StatusUnauthorized, "password didn't match")
 		}
 
 		token, err := generateToken(uid)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(token))
+		return c.String(http.StatusOK, token)
 	})
 
-	mux.HandleFunc("POST /api/auth/register", func(w http.ResponseWriter, r *http.Request) {
+	mux.POST("/api/auth/register", func(c echo.Context) error {
 		var body RegisterInput
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			http.Error(w, "Error decoding request body", http.StatusBadRequest)
-			return
+		if err := c.Bind(&body); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Error decoding request body")
 		}
 
 		_, ok := store.Get(body.Email)
 		if ok {
-			http.Error(w, "Email already taken", http.StatusBadRequest)
-			return
+			return echo.NewHTTPError(http.StatusBadRequest, "Email already taken")
 		}
 
 		userid := uuid.New()
@@ -104,23 +100,20 @@ func main() {
 		mruser, _ := json.Marshal(body)
 		store.Set(userid.String(), string(mruser))
 
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte("Successfully registered"))
+		return c.String(http.StatusCreated, "Successfully registered")
 	})
 
-	mux.HandleFunc("GET /api/private/me", func(w http.ResponseWriter, r *http.Request) {
-		uid := r.Header.Get("x-user-id")
+	mux.GET("/api/private/me", func(c echo.Context) error {
+		uid := c.Request().Header.Get("x-user-id")
 
 		_, err := uuid.Parse(uid)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		}
 
 		data, ok := store.Get(uid)
 		if !ok {
-			http.Error(w, "user not found", http.StatusNotFound)
-			return
+			return echo.NewHTTPError(http.StatusNotFound, "user not found")
 		}
 
 		var structuredData RegisterInput
@@ -132,17 +125,19 @@ func main() {
 			Success bool `json:"success"`
 			Payload any  `json:"payload"`
 		}
-
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(Response{
+		return c.JSON(http.StatusOK, Response{
 			Success: true,
 			Payload: structuredData,
 		})
 	})
 
-	http.ListenAndServe("0.0.0.0:8080", mux)
+	server := &http.Server{
+		Addr:    "0.0.0.0:8080",
+		Handler: mux,
+	}
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func generateToken(userID string) (string, error) {

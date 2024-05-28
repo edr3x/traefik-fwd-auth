@@ -32,6 +32,11 @@ type RegisterInput struct {
 	Password string `json:"password"`
 }
 
+type Response struct {
+	Success bool `json:"success"`
+	Payload any  `json:"payload"`
+}
+
 var accessSecret string
 
 func init() {
@@ -80,7 +85,12 @@ func main() {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 
-		return c.String(http.StatusOK, token)
+		return c.JSON(http.StatusOK, Response{
+			Success: true,
+			Payload: map[string]string{
+				"token": token,
+			},
+		})
 	})
 
 	mux.POST("/api/auth/register", func(c echo.Context) error {
@@ -121,10 +131,6 @@ func main() {
 			log.Println("Error unmarshalling")
 		}
 
-		type Response struct {
-			Success bool `json:"success"`
-			Payload any  `json:"payload"`
-		}
 		return c.JSON(http.StatusOK, Response{
 			Success: true,
 			Payload: structuredData,

@@ -1,0 +1,37 @@
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cors-config
+spec:
+  headers:
+    accessControlAllowMethods:
+      - "GET"
+      - "PUT"
+      - "POST"
+      - "PATCH"
+      - "DELETE"
+      - "OPTIONS"
+    accessControlAllowHeaders:
+      - "Accept"
+      - "Authorization"
+      - "Content-Type"
+      - "Origin"
+      - "x-web-origin"
+      - "x-web-id"
+    accessControlAllowOriginList:
+      - "http://localhost:*"
+      - "https://*"
+    accessControlMaxAge: 100
+    addVaryHeader: true            # Vary: Origin
+    browserXssFilter: true         # X-XSS-Protection: 1; mode=block
+    contentTypeNosniff: true       # X-Content-Type-Options: nosniff
+    # HSTS Headers
+    # Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+    forceSTSHeader: true
+    stsIncludeSubdomains: true
+    stsPreload: true
+    stsSeconds: 63072000
+    frameDeny: true                # X-Frame-Options: DENY
+    referrerPolicy: 'same-origin'  # Referrer-Policy: same-origin
+    sslRedirect: true
